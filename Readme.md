@@ -4,7 +4,7 @@ GOTM_DNN
 ## 1. Introduction
 
 This repository contains the modified codes of the General Ocean
-Turbulence Model (**GOTM**) as used in Yuan et al. (2024). The
+Turbulence Model (**GOTM**) as used in Yuan et al. (2024) The K-profile Parameterization augmented by Deep Neural Networks (KPP_DNN) in the General Ocean Turbulence Model (GOTM). The manuscript is currently under review at the Journal of Advances in Modeling Earth System. The
 modifications incorporate trained deep neural networks (**DNNs**) to
 predict two critical parameters in the K-profile parameterization
 scheme: the velocity scale coefficient ($\epsilon$) and the unresolved
