@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""
+Qing Li, 20180310
+"""
+import sys
+import argparse
+import numpy as np
+from netCDF4 import Dataset
+
+def main():
+    # process the input arguments
+    parser = argparse.ArgumentParser(description="""
+            Check if the point given by the latitude and longitude is a sea
+            point.""")
+    parser.add_argument('-fmask', '--mask_file', action='store', dest='fname_in',
+            metavar='NCFILENAME', required=True, help='Input netCDF filename')
+    parser.add_argument('-lat', '--latitude', action='store', dest='lat',
+            metavar='LATITUDE', required=True,
+            help='Latitude of the requested location (-85, 85)')
+    parser.add_argument('-lon', '--longitude', action='store', dest='lon',
+            metavar='LONGITUDE', required=True,
+            help='Longitude of the requested location (-180, 360)')
+    parser.add_argument('--version', action='version', version='%(prog)s: 1.0')
+    # parsing arguments and save to args
+    args=parser.parse_args()
+
+    # check input
+    rlat = float(args.lat)
+    rlon = float(args.lon)
+    if rlon >= 180:
+        rlon = rlon - 360.0
+
+    if rlat > 85.0 or rlat < -85.0 or rlon > 180.0 or rlon < -180.0:
+        parser.print_help()
+        sys.exit(1)
+
+    # read netCDF file
+    infile = Dataset(args.fname_in, 'r')
+    varlist = infile.variables.keys()
+
+    # read latitude and longitude
+    for vlat in ['latitude', 'lat', 'LAT']:
+        if vlat in varlist:
+            lat = infile.variables[vlat][:]
+            break
+
+    for vlon in ['longitude', 'lon', 'LON']:
+        if vlon in varlist:
+            lon = infile.variables[vlon][:]
+            break
+
+    ind_lat = np.argmin(np.abs(lat-rlat))
+    ind_lon = np.argmin(np.abs(lon-rlon))
+
+    # check if valid sea point
+    for vmask in ['MAPSTA', 'mapsta', 'MASK', 'mask']:
+        if vmask in varlist:
+            region_mask = infile.variables[vmask][:]
+            break
+
+    point_mask = region_mask[ind_lat, ind_lon]
+
+    if point_mask <= 0 or point_mask >=10:
+        print('no')
+        sys.exit(0)
+    else:
+        print('yes')
+        sys.exit(0)
+
+if __name__ == "__main__":
+    main()

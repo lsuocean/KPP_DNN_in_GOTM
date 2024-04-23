@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+'''
+Qing Li, 20171026
+'''
+import sys
+import re
+import argparse
+
+def main():
+    # process the input arguments
+    parser = argparse.ArgumentParser(description='''
+            Query the value of an entry in a namelists. FILENAME and
+            ENTRYID are required. Exit 0 if found, 1 if not found and
+            2 if error in input.''')
+    parser.add_argument('-f', '--file', action='store', dest='nml_in',
+            metavar='FILENAME', help='Input namelist file name')
+    parser.add_argument('-e', '--entry', action='store', dest='nml_entry',
+            metavar='ENTRYID', help='Namelist entry ID')
+    parser.add_argument('-q', '--quiet', action='store_true', dest='nml_quiet',
+            help='Suppress messages, only returns exit code')
+    parser.add_argument('--version', action='version', version='%(prog)s: 1.1')
+    # parsing arguments and save to args
+    args=parser.parse_args()
+
+    if args.nml_in is None or args.nml_entry is None:
+        # print help and exit
+        if not args.nml_quiet:
+            parser.print_help()
+        sys.exit(2)
+
+    # pattern of the entry
+    re_var = args.nml_entry.strip()+' ='
+    # pattern of the comments
+    re_cmt = r'^\!.*'
+    # initialize output
+    outstr = ''
+    with open(args.nml_in, 'r') as infile:
+        for line in infile:
+            # skip if commented out
+            if not re.search(re_cmt, line):
+                # save to outstr and break if match the entry ID
+                if re.search(re_var, line):
+                    outstr = line
+                    break
+    if outstr:
+        if not args.nml_quiet:
+            print(outstr.strip(',\n'))
+        sys.exit(0)
+    else:
+        if not args.nml_quiet:
+            print('Namelist \'{}\': \'{}\' not found.'
+                    .format(args.nml_in, args.nml_entry))
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

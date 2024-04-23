@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""
+Qing Li, 20171026
+"""
+import sys
+import re
+import argparse
+import os
+
+def main():
+    # add a space in front of the arguments starting with '-', and remove
+    # it later to resolve the bug that negative numbers in scientific
+    # notation are not recognized by argparse
+    for i, arg in enumerate(sys.argv):
+        if (arg[0] == '-') and arg[1].isdigit(): sys.argv[i] = ' ' + arg
+    # process the input arguments
+    parser = argparse.ArgumentParser(description="""
+            Change the value of an entry in a namelist. If OUTFILE is not
+            set, modifications will be applied to the input namelist file.
+            FILENAME, ENTRYID and VALUE are required.""")
+    parser.add_argument('-f', '--file', action='store', dest='nml_in',
+            metavar='FILENAME', help='Input namelist file name')
+    parser.add_argument('-e', '--entry', action='store', dest='nml_entry',
+            metavar='ENTRYID', help='Namelist entry ID')
+    parser.add_argument('-v', '--value', action='store', dest='nml_value',
+            metavar='VALUE', help='New value for entry ID')
+    parser.add_argument('-o','--output', action='store', dest='nml_out',
+            metavar='OUTFILE', help='Output namelist file name')
+    parser.add_argument('-q', '--quiet', action='store_true', dest='nml_quiet',
+            help='Suppress all messages, only returns exit code')
+    parser.add_argument('-t', '--test', action='store_true', dest='nml_test',
+            help='Test parsing entry value')
+    parser.add_argument('--version', action='version', version='%(prog)s: 1.1')
+    # parsing arguments and save to args
+    args = parser.parse_args()
+
+    # test string_nmlvalue
+    if args.nml_test:
+        print('Testing the funtion of parsing entry value')
+        alltest = ['2', '-10', '2.', '3.14', '-2.45', '2e3', '2E-10', '3.234e-8', '-2.4e-09',
+                   'T', 'F', 'true', 'false', '.true.', '.false.', 'True', 'False',
+                   'Test', 'Flow', '2001-03-25 00:00:00', './']
+        for stest in alltest:
+            print('{} -> {}'.format(stest, string_nmlvalue(stest)))
+        sys.exit(0)
+    else:
+        if args.nml_in is None or args.nml_entry is None or args.nml_value is None:
+            # print help and exit
+            if not args.nml_quiet:
+                parser.print_help()
+            sys.exit(2)
+
+    # check if namelist exists
+    if not os.path.isfile(args.nml_in):
+        print('Namelist \'{}\' not exist. Stop.'.format(args.nml_in))
+        sys.exit(1)
+
+    # process new value for the entry
+    new_nmlvalue = string_nmlvalue(args.nml_value.lstrip())
+    # pattern of the entry
+    re_var = args.nml_entry.strip()+' ='
+    # pattern of the comments
+    re_cmt = r'^\!.*'
+    # save the content of namelist file
+    rec_info = ''
+    # True if entry is found
+    l_found = False
+    # True if entry value different from input
+    l_diff = False
+    with open(args.nml_in, 'r') as infile:
+        for line in infile:
+            # skip if commented out
+            if not re.search(re_cmt, line):
+                # modify the value if match the entry ID
+                if re.search(re_var, line):
+                    [head, str_val] = line.split(' = ')
+                    l_found = True
+                    if str_val.strip(',\n') == new_nmlvalue:
+                        # the value of entry is already updated
+                        break
+                    else:
+                        # the value of entry needs to be updated
+                        line = '   '+head.strip()+' = '+new_nmlvalue+',\n'
+                        l_diff = True
+            rec_info += line
+
+    # overwrite the input namelist file if OUTFILE is not set
+    if l_found:
+        if l_diff:
+            if args.nml_out:
+                nmlout = args.nml_out
+            else:
+                nmlout = args.nml_in
+            if not args.nml_quiet:
+                print('Namelist \'{}\': \'{}\' -> {}'
+                    .format(args.nml_in, args.nml_entry, new_nmlvalue))
+            with open(nmlout, 'w') as outfile:
+                outfile.write(rec_info)
+        else:
+            if not args.nml_quiet:
+                print('Namelist \'{}\': \'{}\' updated'
+                    .format(args.nml_in, args.nml_entry))
+        sys.exit(0)
+    else:
+        if not args.nml_quiet:
+            print('Namelist \'{}\': \'{}\' not found'
+                .format(args.nml_in, args.nml_entry))
+        sys.exit(1)
+
+def string_nmlvalue(value):
+    """
+
+    This function process the input namelist value and return the formatted
+    string for the namelist.
+
+    :value: (str) input namelist value
+
+    """
+    re_int = r'^[-0-9]+$'
+    re_float = r'^[-0-9]+\.[0-9]*$'
+    re_exp = r'^[-0-9]+\.*[0-9]*[eE][+-]*[0-9]+$'
+    re_false = r'^[Ff]alse$|^\.false\.$'
+    re_true = r'^[Tt]rue$|^\.true\.$'
+    bool_str = {True: '.true.', False: '.false.'}
+    if re.search(re_int, value):
+        return value
+    elif re.search(re_float, value):
+        return value
+    elif re.search(re_exp, value):
+        return value
+    elif re.search(re_true, value):
+        return bool_str[True]
+    elif re.search(re_false, value):
+        return bool_str[False]
+    else:
+        return '\''+value+'\''
+
+if __name__ == "__main__":
+    main()

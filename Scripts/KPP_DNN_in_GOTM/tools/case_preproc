@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Set up input data and modify the namelist accordingly
+# for GOTM
+#
+#  Qing Li, 20171210
+
+import os
+import sys
+import datetime
+import argparse
+import xml.etree.ElementTree as et
+import subprocess as sp
+import re
+
+def main():
+
+    # process the input arguments
+    parser = argparse.ArgumentParser(description="""
+            Preprocess the input data for GOTM and modify the namelist
+            accordingly.""")
+    parser.add_argument('-xml', '--xml', action='store', dest='fname_xml',
+            metavar='XMLFILENAME', required=True, help='Input XML filename')
+    parser.add_argument('-root', '--root', action='store', dest='rootdir',
+            metavar='ROOTDIR', required=True,
+            help='Root directory of GOTMWORK')
+    parser.add_argument('-data', '--data', action='store', dest='datadir',
+            metavar='DATADIR', required=False, help='Input data directory')
+    parser.add_argument('-ds', '--date_start', action='store', dest='date_start',
+            metavar='STARTDATE', required=True,
+            help='Starting date of input data, in the format of YYYYMMDD')
+    parser.add_argument('-de', '--date_end', action='store', dest='date_end',
+            metavar='ENDDATE', required=True,
+            help='Ending date of input data, in the format of YYYYMMDD')
+    parser.add_argument('-method', '--method', action='store', dest='method',
+            metavar='METHOD', required=False,
+            help='The tool to convert netCDF data to text file in GOTMv5 format')
+    parser.add_argument('-skipdata', '--skipdata',
+            action='store_true', dest='l_skip_data',
+            help='Only update namelist without regenerate the input data')
+    parser.add_argument('--version', action='version', version='%(prog)s: 1.0')
+    # parsing arguments and save to args
+    args=parser.parse_args()
+
+    # set paths
+    datestart = args.date_start
+    dateend = args.date_end
+    xmlfile = args.fname_xml
+
+    # check input data
+    if not args.l_skip_data:
+        if not args.datadir:
+            print('Input data is required if -skipdata is not set.')
+            parser.print_help()
+            sys.exit(1)
+        else:
+            datadir = args.datadir
+
+    # check if XML file exists
+    if not os.path.isfile(xmlfile):
+        print('Input XML file \'{}\' not exist. Stop.'.format(xmlfile))
+        sys.exit(1)
+
+    # set tools
+    tooldir = args.rootdir+'/tools'
+    nmlchange = tooldir+'/nmlchange'
+    if args.method:
+        nc2dat_method = args.method
+    else:
+        nc2dat_method = 'nc2dat'
+    nc2dat = tooldir+'/'+nc2dat_method
+
+    # read in data.xml
+    tree = et.parse(xmlfile)
+    root = tree.getroot()
+
+    # datetime string pattern
+    keyre_datetime = r'^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}'
+
+    # get data info
+    dname = root.attrib['name']
+    lat = root.attrib['lat']
+    lon = root.attrib['lon']
+    maxdepth = root.attrib['maxdepth']
+    dt_format = '%Y%m%d'
+    dt_format_l = '%Y-%m-%d %H:%M:%S'
+    dt_format_l2 = '%Y%m%d %H:%M:%S'
+    dstart_str = datetime.datetime.strptime(datestart, dt_format).strftime(dt_format_l)
+    dtend = datetime.datetime.strptime(dateend+' 23:59:59', dt_format_l2)
+
+    # set 'gotmrun.nml'
+    nml = 'gotmrun.nml'
+    sp.run([nmlchange, '-f', nml, '-e', 'name', '-v', dname])
+    sp.run([nmlchange, '-f', nml, '-e', 'latitude', '-v', lat])
+    sp.run([nmlchange, '-f', nml, '-e', 'longitude', '-v', lon])
+    sp.run([nmlchange, '-f', nml, '-e', 'depth', '-v', maxdepth])
+
+    # set 'airsea.nml'
+    #sp.run([nmlchange, '-f', 'airsea.nml', '-e', 'calc_fluxes', '-v', '.false.'])
+
+    # airsea variable in airsea.nml
+    airseavarlist = ['meteo', 'u10', 'swr', 'momentum', 'heat', 'precip']
+
+    # observation profiles in 'obs.nml'
+    obsvarlist = ['t_prof', 's_prof', 'ext_press', 'int_press', 'w_adv', 'zeta',
+                  'wave', 'vel_prof', 'e_prof', 'o2_prof']
+
+    # loop over all variables
+    for child in root:
+        # prepare input data
+        var   = child.attrib['name']
+        fname = child.find('filename').text
+        vtype = child.find('vartype').text
+        oname = child.find('outname').text
+        if not args.l_skip_data:
+            if vtype == 'scalar':
+                # scalar variable
+                vname = child.find('varname').text
+                # nc2dat
+                if nc2dat_method == 'nc2dat_latlon':
+                    sp.run([nc2dat, '-i', datadir+'/'+fname, '-v', vname, '-o', oname,
+                        '-ds', datestart, '-de', dateend, '-lat', lat, '-lon', lon,
+                        '-maxd', maxdepth])
+                elif nc2dat_method == 'nc2dat':
+                    sp.run([nc2dat, '-i', datadir+'/'+fname, '-v', vname, '-o', oname,
+                        '-ds', datestart, '-de', dateend])
+                else:
+                    print('Invalid nc2dat method: {}. Stop.'.format(nc2dat_method))
+                    sys.exit(1)
+            elif vtype == 'vector':
+                # vector variable
+                vnamex = child.find('varnamex').text
+                vnamey = child.find('varnamey').text
+                # nc2dat
+                if nc2dat_method == 'nc2dat_latlon':
+                    sp.run([nc2dat, '-i', datadir+'/'+fname, '-v', vnamex, vnamey,
+                        '-o', oname, '-ds', datestart, '-de', dateend,
+                        '-lat', lat, '-lon', lon, '-maxd', maxdepth])
+                elif nc2dat_method == 'nc2dat':
+                    sp.run([nc2dat, '-i', datadir+'/'+fname, '-v', vnamex, vnamey,
+                        '-o', oname, '-ds', datestart, '-de', dateend])
+                else:
+                    print('Invalid nc2dat method: {}. Stop.'.format(nc2dat_method))
+                    sys.exit(1)
+            elif vtype == 'meteo':
+                # meteorology data
+                #  u10, v10, air pressure at 2m (hPa),
+                #  air temperature at 2m (either degK or degC),
+                #  relative(%)/specific(kg/kg) humidity (determined by hum_method),
+                #  cloud cover
+                vname_u10 = child.find('varname_u10').text
+                vname_v10 = child.find('varname_v10').text
+                vname_slp = child.find('varname_slp').text
+                vname_sat = child.find('varname_sat').text
+                vname_hum = child.find('varname_hum').text
+                vname_cld = child.find('varname_cld').text
+                vname_sw_dn = child.find('varname_sw_dn').text
+                vname_lw_dn = child.find('varname_lw_dn').text
+                vname_prcp = child.find('varname_prcp').text
+                print(oname, vname_slp, os.path.join(datadir, fname))
+                # nc2dat
+                if nc2dat_method == 'nc2dat_latlon':
+                    sp.run([nc2dat, '-i', datadir+'/'+fname,
+                        '-v', vname_u10, vname_v10, vname_slp, vname_sat, vname_hum, vname_cld,vname_sw_dn,vname_lw_dn,vname_prcp,
+                        '-o', oname, '-ds', datestart, '-de', dateend,
+                        '-lat', lat, '-lon', lon, '-maxd', maxdepth])
+                elif nc2dat_method == 'nc2dat':
+                    sp.run([nc2dat, '-i', datadir+'/'+fname,
+                        '-v', vname_u10, vname_v10, vname_slp, vname_sat, vname_hum, vname_cld,vname_sw_dn,vname_lw_dn,vname_prcp,
+                        '-o', oname, '-ds', datestart, '-de', dateend])
+                else:
+                    print('Invalid nc2dat method: {}. Stop.'.format(nc2dat_method))
+                    sys.exit(1)
+            else:
+                print('Variable type {} not supported.'.format(vtype))
+                sys.exit(1)
+        #
+        if vtype == 'meteo':
+            # humidity method
+        #    hum_method = child.find('hum_method').text
+            hum_method = '1'
+            nml = "airsea.nml"
+            sp.run([nmlchange, '-f', nml, '-e', 'hum_method', '-v', hum_method])
+        #
+        # change namelist accordingly
+        # choose namelist
+        if var in obsvarlist:
+            nml = 'obs.nml'
+        else:
+            nml = 'airsea.nml'
+        #
+        # set entry name
+        nml_method = var+'_method'
+        if var in ['momentum', 'heat']:
+            # special name for momentum flux and heat flux
+            nml_file = var+'flux_file'
+        else:
+            nml_file = var+'_file'
+        #
+        # set scale factor if exist
+        found = child.find('scale_factor')
+        if found is not None:
+            scale_factor = child.find('scale_factor').text
+            sp.run([nmlchange, '-f', nml, '-e', var+'_factor', '-v', scale_factor])
+        #
+        # change values in namelist
+        sp.run([nmlchange, '-f', nml, '-e', nml_method, '-v', '2'])
+        sp.run([nmlchange, '-f', nml, '-e', nml_file, '-v', oname])
+        #
+        # find the date & time when all the input data is available
+        # in the time range given by datestart and dateend
+        # only check airsea variables
+        if var in airseavarlist:
+            with open(oname) as fdat:
+                for line in reversed(fdat.readlines()):
+                    if re.search(keyre_datetime, line):
+                        break
+            sp_str = line.split()
+            dtnew = datetime.datetime.strptime(sp_str[0]+' '+sp_str[1], dt_format_l)
+            if dtnew < dtend:
+                dtend = dtnew
+
+    # adjust run time based on the availability of input data
+    dend_str = dtend.strftime(dt_format_l)
+    nml = 'gotmrun.nml'
+    sp.run([nmlchange, '-f', nml, '-e', 'start', '-v', dstart_str])
+    sp.run([nmlchange, '-f', nml, '-e', 'stop', '-v', dend_str])
+
+if __name__ == "__main__":
+    main()
