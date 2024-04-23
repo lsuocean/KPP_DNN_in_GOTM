@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Plot map of diagnostics
+#
+# Qing Li, 20181107
+
+import sys
+import os
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+sys.path.append(os.environ['GOTMWORK_ROOT']+'/tools', )
+from gotmanalysis import GOTMMap
+from core2jra55do import list_turbmethod, list_setup, list_tmname, list_month,\
+                         irow_2col, icol_2col, labels_2col, l_nlt
+
+# process the input arguments
+parser = argparse.ArgumentParser(description="""
+        Plot global map of diagnostics.\n
+        Supported diagnostics:
+            mld_deltaR_mean
+            PE_delta
+            SST_mean
+            SSS_mean
+            Nsqr_mld_mean""",
+            formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-c', '--casename', action='store', dest='casename',
+        metavar='CASENAME', required=True, help='Case name')
+parser.add_argument('-s', '--setupname', action='store', dest='setupname',
+        metavar='SETUPNAME', required=True, help='name of the setup')
+parser.add_argument('-d', '--diagname', action='store', dest='diagname',
+        metavar='DIAGNAME', required=True, help='Diagnostic name')
+# parsing arguments and save to args
+args=parser.parse_args()
+casename = args.casename
+setupname = args.setupname
+diagname = args.diagname
+
+# check for input arguments
+if setupname not in list_setup:
+    raise ValueError('Simulation setup \'{}\' not supported.'.format(setupname))
+
+# diagnostics
+if diagname == 'mld_deltaR_mean':
+    levels0 = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 110, 130, 150, 180, 210, 240, 280, 320, 360, 407, 454, 500]
+    cb_ticks0 = [0, 30, 60, 90, 150, 240, 360, 500]
+    levels1 = [-70, -60, -50, -40, -30, -20, -18, -16, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 30, 40, 50, 60, 70]
+    cb_ticks1 = [-60, -40, -20, -16, -12, -8, -4, 0, 4, 8, 12, 16, 20, 40, 60]
+    fill_value = 499.5
+elif diagname == 'mld_deltaRp1_mean':
+    levels0 = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 110, 130, 150, 180, 210, 240, 280, 320, 360, 407, 454, 500]
+    cb_ticks0 = [0, 30, 60, 90, 150, 240, 360, 500]
+    levels1 = [-70, -60, -50, -40, -30, -20, -18, -16, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 30, 40, 50, 60, 70]
+    cb_ticks1 = [-60, -40, -20, -16, -12, -8, -4, 0, 4, 8, 12, 16, 20, 40, 60]
+    fill_value = 499.5
+elif diagname == 'PE_delta':
+    levels0 = list((np.arange(21)-10)*2e4)
+    cb_ticks0 = None
+    levels1 = list((np.arange(21)-10)*2e3)
+    cb_ticks1 = None
+    fill_value = None
+elif diagname == 'SST_mean':
+    levels0 = list(np.arange(31))
+    cb_ticks0 = None
+    levels1 = list((np.arange(21)-10)*0.1)
+    cb_ticks1 = None
+    fill_value = None
+elif diagname == 'SSS_mean':
+    levels0 = None
+    cb_ticks0 = None
+    levels1 = None
+    cb_ticks1 = None
+    fill_value = None
+elif diagname == 'Nsqr_mld_mean':
+    levels0 = list((np.arange(26)*1e-4))
+    cb_ticks0 = None
+    levels1 = list((np.arange(21)-10)*2e-4)
+    cb_ticks1 = None
+    fill_value = None
+else:
+    raise ValueError('Variable {} not supported.'.format(diagname))
+
+# paths
+s1data_root = os.environ['GOTMRUN_ROOT']+'/'+casename+'/'+setupname
+s2data_root = os.environ['GOTMFIG_ROOT']+'/data/'+casename+'/'+setupname
+fig_root = os.environ['GOTMFIG_ROOT']+'/'+casename+'/'+setupname
+os.makedirs(s2data_root, exist_ok=True)
+os.makedirs(fig_root, exist_ok=True)
+
+# get diagnostics
+nm = len(list_turbmethod)
+for i in np.arange(nm):
+    turbmethod = list_turbmethod[i]
+    s2data_name = s2data_root+'/data_map_'+diagname+'_'+turbmethod+'.npz'
+    # read data
+    gmobj = GOTMMap().load(s2data_name)
+    if i == 0:
+        lon = gmobj.lon
+        lat = gmobj.lat
+        name = gmobj.name
+        units = gmobj.units
+        nloc = len(lon)
+        darr = np.zeros([nm, nloc])
+    darr[i,:] = gmobj.data
+
+# label for month
+idx = list_setup.index(setupname)
+mlabel = list_month[idx]
+
+# plot figure
+nrow = (nm+2)//2
+fig_width = 12
+fig_height = 3+2*(nrow-1)
+height_ratios = [1]*nrow
+height_ratios.append(0.15)
+width_ratios = [1, 1, 0.05]
+f, axarr = plt.subplots(nrow, 2, sharex='col')
+f.set_size_inches(fig_width, fig_height)
+# mean of all non-Langmuir cases
+gmdata_md = np.nanmean(darr[l_nlt], axis=0)
+gmobj = GOTMMap(data=gmdata_md, lon=lon, lat=lat, name=name, units=units)
+im0 = gmobj.plot(axis=axarr[0,0], levels=levels0, add_colorbar=False)
+axarr[0,0].text(0.02, 0.94, '(a) Mean of NLT', transform=axarr[0,0].transAxes,
+                     fontsize=12, color='white', fontweight='bold', va='top')
+# plot the differences from the median
+for i in np.arange(nm):
+    n = icol_2col[i]
+    m = irow_2col[i]
+    gmdata = darr[i,:] - gmdata_md
+    gmobj = GOTMMap(data=gmdata, lon=lon, lat=lat, name=name, units=units)
+    im1 = gmobj.plot(axis=axarr[m,n], levels=levels1, add_colorbar=False, cmap='RdBu_r')
+    axarr[m,n].text(0.02, 0.94, labels_2col[i]+' '+list_tmname[i], transform=axarr[m,n].transAxes,
+                     fontsize=12, color='white', fontweight='bold', va='top')
+# add month
+axarr[0,1].text(1.07, 0.94, mlabel, transform=axarr[0,1].transAxes,
+               fontsize=16, color='k', fontweight='bold', va='top',
+               bbox=dict(boxstyle="square",ec='k',fc='w'))
+# reduce margin
+plt.tight_layout()
+# colorbar
+plt.subplots_adjust(right=0.95)
+cax0 = plt.axes([0.85, 0.55, 0.1, 0.4])
+cax0.set_visible(False)
+cb0 = plt.colorbar(im0, ax=cax0, ticks=cb_ticks0)
+cb0.formatter.set_powerlimits((-2, 3))
+cb0.update_ticks()
+cax1 = plt.axes([0.85, 0.05, 0.1, 0.4])
+cax1.set_visible(False)
+cb1 = plt.colorbar(im1, ax=cax1, ticks=cb_ticks1)
+cb1.formatter.set_powerlimits((-3, 3))
+cb1.update_ticks()
+# save figure
+figname = fig_root+'/fig_'+diagname+'.png'
+plt.savefig(figname, dpi = 300)
+

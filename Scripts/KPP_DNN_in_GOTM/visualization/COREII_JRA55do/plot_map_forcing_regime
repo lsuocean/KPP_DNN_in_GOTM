@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Plot map of forcing regime
+#
+# Qing Li, 20181107
+
+import sys
+import os
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+sys.path.append(os.environ['GOTMWORK_ROOT']+'/tools', )
+from gotmanalysis import GOTMMap, plot_forcing_regime_map
+from core2jra55do import list_turbmethod, list_setup, list_month
+
+# process the input arguments
+parser = argparse.ArgumentParser(description="""
+        Plot global map of forcing regime.\n
+        Supported diagnostics:
+            BG12
+            LF17 """,
+            formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-c', '--casename', action='store', dest='casename',
+        metavar='CASENAME', required=True, help='Case name')
+parser.add_argument('-s', '--setupname', action='store', dest='setupname',
+        metavar='SETUPNAME', required=True, help='name of the setup')
+parser.add_argument('-d', '--diagname', action='store', dest='diagname',
+        metavar='DIAGNAME', required=True, help='Diagnostic name')
+parser.add_argument('-m', '--turbmethod', action='store', dest='turbmethod',
+        metavar='TURBMETHOD', help='name of turbulence closure method')
+# parsing arguments and save to args
+args=parser.parse_args()
+
+casename = args.casename
+setupname = args.setupname
+forcing_reg_type = args.diagname
+if args.turbmethod is None:
+    turbmethod = 'KPP-CVMix'
+else:
+    turbmethod = args.turbmethod
+
+# check for input arguments
+if setupname not in list_setup:
+    raise ValueError('Simulation setup \'{}\' not supported.'.format(setupname))
+
+# check forcing_reg_type
+list_fr = ['BG12', 'LF17']
+if forcing_reg_type not in list_fr:
+    raise ValueError('Forcing regime \'{}\' not supported.'.format(forcing_reg_type))
+
+# paths
+s1data_root = os.environ['GOTMRUN_ROOT']+'/'+casename+'/'+setupname
+s2data_root = os.environ['GOTMFIG_ROOT']+'/data/'+casename+'/'+setupname
+fig_root = os.environ['GOTMFIG_ROOT']+'/'+casename+'/'+setupname
+os.makedirs(s2data_root, exist_ok=True)
+os.makedirs(fig_root, exist_ok=True)
+
+# get forcing regime
+s2data_name = s2data_root+'/data_map_forcing_regime_'+forcing_reg_type+'_'+turbmethod+'.npz'
+# read data
+gmobj = GOTMMap().load(s2data_name)
+
+# label for month
+idx = list_setup.index(setupname)
+mlabel = list_month[idx]
+
+# plot figure
+fig = plt.figure()
+fig.set_size_inches(6, 2.2)
+# plot
+plot_forcing_regime_map(gmobj)
+# label
+plt.text(40, 55, mlabel, fontsize=14, color='k', fontweight='bold', va='top',
+        bbox=dict(boxstyle="square",ec='k',fc='w'))
+# reduce margin
+plt.tight_layout()
+# save figure
+figname = fig_root+'/fig_forcing_regime_'+forcing_reg_type+'.png'
+plt.savefig(figname, dpi = 300)
+
