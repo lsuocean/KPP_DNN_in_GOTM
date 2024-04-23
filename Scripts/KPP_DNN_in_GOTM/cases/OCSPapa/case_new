@@ -1,0 +1,110 @@
+#!/bin/bash
+# Setup and run GOTM for OCS Papa
+#
+# Qing Li, 20171105
+
+#######################################################################
+#                              Set paths                              #
+#######################################################################
+
+# setup paths and tools
+source "../../set_tools.sh"
+
+# input data - surface fluxes
+#fluxdata="/Users/fourones/Documents/qing/gotwork/data/OCSPapa_20110219-20171005"
+# fluxdata="${GOTMDATA_ROOT}/OCS/Papa/Papa_2008-2009"
+#fluxdata="$/Users/fourones/Documents/qing/gotmwork/data/OCSPapa_20110219-20171005"
+fluxdata="${GOTMDATA_ROOT}/new"
+# input data - waves
+specdata="${GOTMDATA_ROOT}/new/166p1_historic.nc"
+
+# current path
+curdir=$(pwd)
+
+#######################################################################
+#                           Set parameters                            #
+#######################################################################
+
+# name of the dataset
+title="OCSPapa"
+
+# set levels, grid zooming at surface
+nlev=128
+ddu=0
+ddl=0
+
+# run parameters
+dt=1800
+nsave=1
+
+# output file name
+outname="gotm_out"
+
+# starting and ending date - in the format of YYYYMMDD
+datestart="20110101"
+dateend="20120101"
+# name of the turbulence model
+  turbmethod="KPP-GOTM"
+
+# case name
+casename="${title}_${turbmethod}_${datestart}-${dateend}"
+
+#######################################################################
+#                        Preprocess input data                        #
+#######################################################################
+
+# create run directory
+rundir="${GOTMRUN_ROOT}/${casename}"
+mkdir -p ${rundir}
+cd ${rundir}
+
+# set up namelists
+cp ${nmldir}/*.nml ./
+
+# Yuan added: copy grid data to the output folder
+# grid_method=2
+cp ${nmldir}/*.txt ./
+# set run parameters
+xmlfile=${title}.xml
+cp ${xmldir}/${xmlfile} ./
+${cmd_case_preproc} -xml ${xmlfile} -root ${GOTMWORK_ROOT} -data ${fluxdata} \
+    -ds ${datestart} -de ${dateend}
+${cmd_nmlchange} -f gotmrun.nml -e title -v ${title}
+${cmd_nmlchange} -f gotmrun.nml -e out_fn -v ${outname}
+${cmd_nmlchange} -f gotmrun.nml -e dt -v ${dt}
+${cmd_nmlchange} -f gotmrun.nml -e nsave -v ${nsave}
+${cmd_nmlchange} -f gotmrun.nml -e nlev -v ${nlev}
+${cmd_nmlchange} -f gotmmean.nml -e ddu -v ${ddu}
+${cmd_nmlchange} -f gotmmean.nml -e ddl -v ${ddl}
+${cmd_nmlchange} -f airsea.nml -e sst_method -v 0
+${cmd_nmlchange} -f airsea.nml -e sss_method -v 0
+
+# processing wave spectrum data
+if [ ! -z ${specdata} ]; then
+    # only do this if specdata is set
+    ${cmd_nc2dat_cdip} -i ${specdata} -o "spec_file.dat" -ds ${datestart} \
+        -de ${dateend}
+    ${cmd_nmlchange} -f obs.nml -e ustokes_method -v 2
+    ${cmd_nmlchange} -f obs.nml -e nfreq -v 64
+    ${cmd_nmlchange} -f obs.nml -e spec_file -v 'spec_file.dat'
+fi
+
+# set turbulence method
+source ${scpt_case_turbmethod}
+
+# calculate Langmuir number and enhancement factor from wave spectrum
+${cmd_nmlchange} -f langmuir.nml -e langmuir_number_method -v 3
+${cmd_nmlchange} -f airsea.nml -e sst_method -v 0
+${cmd_nmlchange} -f airsea.nml -e sss_method -v 0
+#${cmd_nmlchange} -f airsea.nml -e precip_method -v 12
+#######################################################################
+#                              Run GOTM                               #
+#######################################################################
+${cmd_gotm} 2> log.${outname}
+
+#######################################################################
+#                           Postprocessing                            #
+#######################################################################
+
+# plot surface forcing and profiles
+#source ${curdir}/case_postproc1.sh

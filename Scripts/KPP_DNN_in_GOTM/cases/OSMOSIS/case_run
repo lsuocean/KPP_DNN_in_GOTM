@@ -1,0 +1,89 @@
+#!/bin/bash
+# Run GOTM using preprocessed data for OSMOSIS
+# Require a base case which contains the preprocessed input data
+# and namelist, e.g., as a result of case_test
+#
+# Qing Li, 20180504
+
+#######################################################################
+#                              Set paths                              #
+#######################################################################
+
+# setup paths and tools
+source "../../set_tools.sh"
+
+# season (winter or spring)
+season="winter"
+
+# directory of base case
+basecase="${GOTMWORK_ROOT}/data/OSMOSIS_${season}"
+
+# current path
+curdir=$(pwd)
+
+#######################################################################
+#                           Set parameters                            #
+#######################################################################
+
+# name of the dataset
+title="OSMOSIS_${season}"
+
+# set levels and grid zooming at surface
+nlev=128
+ddu=0
+ddl=0
+
+# run parameters
+dt=1800
+nsave=6
+
+# name of the turbulence model
+# turbmethod="OSMOSIS"
+# turbmethod="SMC"
+# turbmethod="KPP-CVMix"
+# turbmethod="KPPLT-EFACTOR"
+turbmethod="KPPLT-ENTR"
+# turbmethod="EPBL"
+
+# output file name
+outname="gotm_out"
+
+# case name
+casename="${title}_${turbmethod}"
+
+#######################################################################
+#                        Preprocess input data                        #
+#######################################################################
+
+# create run directory
+rundir="${GOTMRUN_ROOT}/${casename}"
+mkdir -p ${rundir}
+cd ${rundir}
+
+# input data and namelist
+cp ${basecase}/* ./
+
+# set run parameters
+${cmd_nmlchange} -f gotmrun.nml -e nlev -v ${nlev}
+${cmd_nmlchange} -f gotmrun.nml -e dt -v ${dt}
+
+${cmd_nmlchange} -f gotmrun.nml -e name -v ${title}
+${cmd_nmlchange} -f gotmrun.nml -e out_fn -v ${outname}
+${cmd_nmlchange} -f gotmrun.nml -e nsave -v ${nsave}
+${cmd_nmlchange} -f gotmmean.nml -e ddu -v ${ddu}
+${cmd_nmlchange} -f gotmmean.nml -e ddl -v ${ddl}
+
+# set turbulence method
+source ${scpt_case_turbmethod}
+
+#######################################################################
+#                              Run GOTM                               #
+#######################################################################
+${cmd_gotm} 2> log.${outname}
+
+#######################################################################
+#                           Postprocessing                            #
+#######################################################################
+
+# plot surface forcing and profiles
+source ${curdir}/case_postproc.sh

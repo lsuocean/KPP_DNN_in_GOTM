@@ -1,0 +1,100 @@
+#!/bin/bash
+# Run GOTM using preprocessed data for OCS Papa
+# Require a base case which contains the preprocessed input data
+# and namelist, e.g., as a result of case_test
+#
+# Qing Li, 20180504
+
+#######################################################################
+#                              Set paths                              #
+#######################################################################
+
+# setup paths and tools
+source "../../set_tools.sh"
+
+# directory of base case
+basecase="${GOTMDATA_ROOT}/new"
+
+# current path
+curdir=$(pwd)
+
+#######################################################################
+#                           Set parameters                            #
+#######################################################################
+
+# name of the dataset
+title="OCSPapa"
+
+# set levels, grid zooming at surface
+nlev=128
+ddu=0
+ddl=0
+
+# run parameters
+dt=1800
+nsave=1
+
+# starting and ending date - in the format of YYYYMMDD
+datestart="20110101"
+dateend="20120101"
+
+# name of the turbulence model
+# turbmethod="KPPLT-EFACTOR"
+# turbmethod="KPPLT-ENTR"
+#  turbmethod="KPPLT-RWHGK"
+# turbmethod="KPP-CVMix"
+#  turbmethod="SMCLT"
+# turbmethod="SMC"
+  turbmethod="KPPLT-LF17"
+# output file name
+outname="gotm_out"
+
+# case name
+casename="${title}_${turbmethod}_${datestart}-${dateend}"
+
+#######################################################################
+#                        Preprocess input data                        #
+#######################################################################
+
+# create run directory
+rundir="${GOTMRUN_ROOT}/${casename}"
+mkdir -p ${rundir}
+cd ${rundir}
+
+# copy base case
+#cp ${basecase}/* ./
+
+# decompress input data
+# for f in *.gz; do
+#     gunzip -f ${f}
+# done
+
+# set run parameters
+start_time="${datestart:0:4}-${datestart:4:2}-${datestart:6:2} 00:00:00"
+stop_time="${dateend:0:4}-${dateend:4:2}-${dateend:6:2} 00:00:00"
+${cmd_nmlchange} -f gotmrun.nml -e start -v "${start_time}"
+${cmd_nmlchange} -f gotmrun.nml -e stop -v "${stop_time}"
+${cmd_nmlchange} -f gotmrun.nml -e title -v ${title}
+${cmd_nmlchange} -f gotmrun.nml -e out_fn -v ${outname}
+${cmd_nmlchange} -f gotmrun.nml -e dt -v ${dt}
+${cmd_nmlchange} -f gotmrun.nml -e nsave -v ${nsave}
+${cmd_nmlchange} -f gotmrun.nml -e nlev -v ${nlev}
+${cmd_nmlchange} -f gotmmean.nml -e ddu -v ${ddu}
+${cmd_nmlchange} -f gotmmean.nml -e ddl -v ${ddl}
+
+${cmd_nmlchange} -f obs.nml -e vel_relax_tau -v 864000.
+
+# set turbulence method
+source ${scpt_case_turbmethod}
+
+#######################################################################
+#                              Run GOTM                               #
+#######################################################################
+${cmd_gotm} 2> log.${outname}
+
+#######################################################################
+#                           Postprocessing                            #
+#######################################################################
+
+# plot surface forcing and profiles
+source ${curdir}/case_postproc.sh
