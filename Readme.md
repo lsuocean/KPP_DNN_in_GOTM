@@ -11,6 +11,8 @@ predict two critical parameters in the K-profile parameterization
 scheme: the velocity scale coefficient ($\epsilon$) and the unresolved
 shear coefficient ($\eta$).
 
+If you are interested in the LES solutions to train the DNN model, please feel free to email us (jliang at lsu.edu).
+
 DNNs are typically trained using Python or other advanced programming
 languages, whereas GOTM and many other ocean models are developed in the
 basic Fortran language. To integrate DNNs into GOTM both flexibly and
